@@ -17,9 +17,9 @@ jobs:
           branch: v3.20
           packages: build-base musl-dev file
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         id: cache
         with:
           path: bin/mhs
@@ -34,13 +34,23 @@ jobs:
         run: file bin/mhs | grep -q 'statically linked'
         shell: alpine.sh {0}
 
-      - name: Strip and stage
-        run: strip --strip-all bin/mhs && cp bin/mhs mhs-linux-x86_64
+      - name: Stage and package
+        run: |
+          V=$(grep '^VERSION=' Makefile | cut -d= -f2 | tr -d ' ')
+          DATA="staging/mhs-$V/packages/mhs-$V/data"
+          mkdir -p staging/bin "$DATA/src"
+          sed -e 's,%GMPFLAGS,,' -e 's,%GMPLIBS,-lm,' mhs.conf.in > mhs.conf
+          strip --strip-all bin/mhs && cp bin/mhs staging/bin/mhs
+          cp mhs.conf "$DATA/mhs.conf"
+          cp -r src/runtime "$DATA/src/runtime"
+          bin/mhs -Q generated/base.pkg "staging/mhs-$V"
+          tar czf mhs-linux-x86_64.tar.gz -C staging .
+        shell: alpine.sh {0}
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: mhs-linux-x86_64
-          path: mhs-linux-x86_64
+          path: mhs-linux-x86_64.tar.gz
 
   build-linux-x86_64-gmp:
     name: Linux x86_64 (GMP)
@@ -57,9 +67,9 @@ jobs:
           branch: v3.20
           packages: build-base musl-dev gmp-dev file
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         id: cache
         with:
           path: bin/mhs
@@ -74,13 +84,23 @@ jobs:
         run: file bin/mhs | grep -q 'statically linked'
         shell: alpine.sh {0}
 
-      - name: Strip and stage
-        run: strip --strip-all bin/mhs && cp bin/mhs mhs-linux-x86_64-gmp
+      - name: Stage and package
+        run: |
+          V=$(grep '^VERSION=' Makefile | cut -d= -f2 | tr -d ' ')
+          DATA="staging/mhs-$V/packages/mhs-$V/data"
+          mkdir -p staging/bin "$DATA/src"
+          sed -e "s,%GMPFLAGS,$MHSGMPCCFLAGS," -e "s,%GMPLIBS,$MHSGMPCCLIBS," mhs.conf.in > mhs.conf
+          strip --strip-all bin/mhs && cp bin/mhs staging/bin/mhs
+          cp mhs.conf "$DATA/mhs.conf"
+          cp -r src/runtime "$DATA/src/runtime"
+          bin/mhs -Q generated/base.pkg "staging/mhs-$V"
+          tar czf mhs-linux-x86_64-gmp.tar.gz -C staging .
+        shell: alpine.sh {0}
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: mhs-linux-x86_64-gmp
-          path: mhs-linux-x86_64-gmp
+          path: mhs-linux-x86_64-gmp.tar.gz
 
   release:
     name: Create Release
@@ -89,7 +109,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Resolve tag
         id: tag
@@ -108,5 +128,5 @@ jobs:
           draft: false
           generate_release_notes: true
           files: |
-            artifacts/mhs-linux-x86_64/mhs-linux-x86_64
-            artifacts/mhs-linux-x86_64-gmp/mhs-linux-x86_64-gmp
+            artifacts/mhs-linux-x86_64/mhs-linux-x86_64.tar.gz
+            artifacts/mhs-linux-x86_64-gmp/mhs-linux-x86_64-gmp.tar.gz
